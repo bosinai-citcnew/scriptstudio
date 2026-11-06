@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>文稿影片產生器 — 線上出片</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif; background: #f6f2ea; color: #2b2118; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 22px; margin: 6px 0 2px; }
+  .sub { color: #7a6a58; font-size: 14px; margin: 0 0 18px; line-height: 1.6; }
+  .card { background: #fff; border: 1px solid #e5dccb; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .step { display: flex; gap: 10px; align-items: baseline; }
+  .num { flex: 0 0 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; background: #8a6d3b; color: #fff; font-weight: 700; font-size: 15px; }
+  .step h2 { font-size: 17px; margin: 0 0 4px; }
+  .step p { margin: 0 0 10px; color: #7a6a58; font-size: 13.5px; line-height: 1.6; }
+  input[type=file] { display: block; width: 100%; font-size: 15px; padding: 10px; border: 1.5px dashed #c9b896; border-radius: 10px; background: #fdfbf7; }
+  textarea { width: 100%; min-height: 180px; font-size: 15px; line-height: 1.7; padding: 10px; border: 1.5px solid #d8cdb8; border-radius: 10px; resize: vertical; font-family: inherit; }
+  .meta { font-size: 13px; color: #5b7a4e; margin-top: 8px; min-height: 18px; }
+  .count { font-size: 12.5px; color: #9a8a74; text-align: right; margin-top: 4px; }
+  button.go { width: 100%; padding: 15px; font-size: 18px; font-weight: 700; border: none; border-radius: 12px; background: #8a6d3b; color: #fff; cursor: pointer; }
+  button.go:disabled { background: #b9ab8d; cursor: wait; }
+  .err { background: #fdecea; color: #8f2b1d; border: 1px solid #f0b6ad; border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-bottom: 12px; display: none; }
+  .job { background: #fff; border: 1px solid #e5dccb; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+  .job .title { font-weight: 700; font-size: 15px; word-break: break-all; }
+  .job .st { font-size: 13px; color: #7a6a58; margin: 4px 0 8px; }
+  .bar { height: 10px; background: #eee5d3; border-radius: 5px; overflow: hidden; }
+  .bar > div { height: 100%; background: #8a6d3b; width: 0%; transition: width .5s; }
+  .bar.done > div { background: #5b7a4e; }
+  .bar.fail > div { background: #b3402a; }
+  .dl { display: inline-block; margin-top: 10px; padding: 10px 16px; background: #5b7a4e; color: #fff; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 15px; }
+  .note { font-size: 12.5px; color: #9a8a74; line-height: 1.7; margin-top: 16px; }
+  .empty { color: #9a8a74; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎬 文稿影片產生器</h1>
+  <p class="sub">三步出片：上傳配音 → 貼上標注字稿 → 開始製作。影片在雲端排隊算好，算完就能下載。手機、平板、電腦都能用。</p>
+
+  <div class="err" id="err"></div>
+
+  <div class="card">
+    <div class="step"><div class="num">1</div><div style="flex:1">
+      <h2>上傳音檔</h2>
+      <p>配音 mp3 / wav / m4a（上限 100 MB）。先上傳音檔，字稿才不會被清掉。</p>
+      <input type="file" id="audio" accept=".mp3,.wav,.m4a,.ogg,.webm,audio/*">
+      <div class="meta" id="audioMeta"></div>
+    </div></div>
+  </div>
+
+  <div class="card">
+    <div class="step"><div class="num">2</div><div style="flex:1">
+      <h2>貼上標注字稿</h2>
+      <p>直接貼上全文，或上傳 .txt / .md 檔。`*...*` 是強調行，請照原文貼，不要改字。</p>
+      <textarea id="script" placeholder="聖徒們好&#10;我們來到晨興聖言&#10;第三週週四&#10;……"></textarea>
+      <div class="count"><span id="charCount">0</span> 字</div>
+      <input type="file" id="scriptFile" accept=".txt,.md" style="margin-top:8px">
+      <div class="meta" id="scriptMeta"></div>
+    </div></div>
+  </div>
+
+  <div class="card">
+    <div class="step"><div class="num">3</div><div style="flex:1">
+      <h2>開始製作</h2>
+      <p>送出後會排隊製作（一次只做一部，多的會排隊）。做好會出現在下方清單，可以直接下載。</p>
+      <button class="go" id="go">🎬 開始製作</button>
+    </div></div>
+  </div>
+
+  <h2 style="font-size:17px;margin:22px 0 10px">📋 製作清單</h2>
+  <div class="err" id="offline" style="display:none">😴 出片服務暫時離線，請稍後再試。頁面會自動重試，不用重新找連結。</div>
+  <div id="jobs"><p class="empty">還沒有任務。送出第一部影片吧！</p></div>
+
+  <p class="note">小提醒：出片時間大約是音檔長度的 2 倍（3 分半的稿子約 6–10 分鐘）。檔案會保留 7 天，逾時自動清除。一次只算一部，週一在算的時候，週二可以先送進來排隊。</p>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const errBox = $('err');
+function showErr(msg) { errBox.textContent = msg; errBox.style.display = 'block'; }
+function hideErr() { errBox.style.display = 'none'; }
+function setOffline(on) { $('offline').style.display = on ? 'block' : 'none'; }
+
+// ---- 後端位址：先讀同目錄的 api-base.json（由看守自動更新），讀不到就 fallback ----
+// 本機 :3100 開時沒有 api-base.json → 用同源（''）；GitHub Pages 開時讀不到 → 用固定子網域。
+const FALLBACK_API = 'https://scriptstudio-video.loca.lt';
+let API_BASE = '';
+let apiConfigured = false;
+function api(path) { return API_BASE + path; }
+async function loadApiBase() {
+  try {
+    const r = await fetch('api-base.json', { cache: 'no-store' });
+    if (r.ok) {
+      const cfg = await r.json();
+      if (cfg && typeof cfg.apiBase === 'string' && cfg.apiBase.startsWith('https://')) {
+        const next = cfg.apiBase.replace(/\/$/, '');
+        if (next !== API_BASE) { API_BASE = next; }
+        apiConfigured = true;
+        return;
+      }
+    }
+  } catch (e) { /* 讀不到設定檔，用 fallback */ }
+  if (!apiConfigured) {
+    API_BASE = location.hostname.endsWith('github.io') ? FALLBACK_API : '';
+    apiConfigured = true;
+  }
+}
+
+let audioFile = null;
+$('audio').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  audioFile = f;
+  const a = new Audio();
+  a.preload = 'metadata';
+  a.onloadedmetadata = () => {
+    const m = Math.floor(a.duration / 60), s = Math.floor(a.duration % 60);
+    $('audioMeta').textContent = `已選：${f.name}（${(f.size/1024/1024).toFixed(1)} MB，長度 ${m}:${String(s).padStart(2,'0')}）`;
+  };
+  a.onerror = () => { $('audioMeta').textContent = `已選：${f.name}（${(f.size/1024/1024).toFixed(1)} MB）`; };
+  a.src = URL.createObjectURL(f);
+});
+$('scriptFile').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    $('script').value = r.result;
+    updateCount();
+    $('scriptMeta').textContent = `已讀入：${f.name}（${r.result.length} 字）`;
+  };
+  r.readAsText(f);
+});
+function updateCount() { $('charCount').textContent = $('script').value.length; }
+$('script').addEventListener('input', updateCount);
+
+$('go').addEventListener('click', async () => {
+  hideErr();
+  if (!audioFile) { showErr('請先選第 1 步的音檔'); return; }
+  const text = $('script').value.trim();
+  if (!text) { showErr('請在第 2 步貼上字稿或上傳 .txt 檔'); return; }
+  const btn = $('go');
+  btn.disabled = true; btn.textContent = '送出中…';
+  try {
+    const fd = new FormData();
+    fd.append('audio', audioFile);
+    fd.append('scriptText', $('script').value);
+    const r = await fetch(api('/api/jobs'), { method: 'POST', body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || '送出失敗');
+    setOffline(false);
+    $('script').value = ''; updateCount();
+    loadJobs();
+  } catch (e) {
+    showErr(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '🎬 開始製作';
+  }
+});
+
+const STAGE_LABEL = {
+  queued: '排隊等待中', voicepack: '確認語音包', audio: '匯入音檔',
+  script: '匯入文字', align: '對稿中', structure: '固定結構',
+  styles: '版面樣式', render: '渲染中', done: '完成', error: '失敗',
+};
+const STATUS_LABEL = { queued: '排隊中', running: '製作中', completed: '完成', failed: '失敗' };
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+async function loadJobs() {
+  try {
+    const r = await fetch(api('/api/jobs'));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const { jobs } = await r.json();
+    setOffline(false);
+    const box = $('jobs');
+    if (!jobs.length) { box.innerHTML = '<p class="empty">還沒有任務。送出第一部影片吧！</p>'; return; }
+    box.innerHTML = jobs.map((j) => {
+      const p = j.progress || { stage: j.status, percent: 0, detail: '' };
+      const pct = Math.max(0, Math.min(100, p.percent || 0));
+      const cls = j.status === 'completed' ? 'done' : (j.status === 'failed' ? 'fail' : '');
+      const label = j.status === 'completed' ? '完成' : (j.status === 'failed' ? '失敗' : (STAGE_LABEL[p.stage] || p.stage));
+      const extra = j.status === 'completed' && j.durationSec ? `・片長 ${Math.floor(j.durationSec/60)}:${String(Math.floor(j.durationSec%60)).padStart(2,'0')}` : '';
+      const size = j.outputSize ? `・${(j.outputSize/1024/1024).toFixed(1)} MB` : '';
+      return `<div class="job">
+        <div class="title">${escapeHtml(j.name)}</div>
+        <div class="st">${STATUS_LABEL[j.status] || j.status}・${label}・${fmtTime(j.createdAt)}${extra}${size}</div>
+        <div class="bar ${cls}"><div style="width:${j.status==='completed'?100:pct}%"></div></div>
+        <div class="st">${escapeHtml(p.detail || '')}</div>
+        ${j.status === 'completed' ? `<a class="dl" href="${api('/download/' + j.id)}">⬇ 下載影片</a>` : ''}
+        ${j.status === 'failed' ? `<div class="st" style="color:#b3402a">⚠ ${escapeHtml(j.error || '製作失敗')}</div>` : ''}
+      </div>`;
+    }).join('');
+  } catch (e) { setOffline(true); /* 下次再試 */ }
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// 先讀 api-base.json 再列任務；每 60 秒重讀設定檔（看守更新網址後頁面自動跟上），每 5 秒更新清單
+loadApiBase().then(loadJobs);
+setInterval(loadJobs, 5000);
+setInterval(() => { loadApiBase().then(loadJobs); }, 60000);
+</script>
+</body>
+</html>
